@@ -60,7 +60,7 @@ const WalletDashboard: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return `KND ${amount.toFixed(0)}`;
+    return `₭ ${amount.toLocaleString()}`;
   };
 
   if (loading) {
@@ -86,7 +86,7 @@ const WalletDashboard: React.FC = () => {
         <CardHeader className="pb-2">
           <CardDescription>Current Balance</CardDescription>
           <CardTitle className="text-4xl font-bold text-center">
-            {balance ? formatCurrency(balance.balance) : 'KND 0'}
+            {balance ? formatCurrency(balance.balance) : '₭ 0'}
           </CardTitle>
         </CardHeader>
         <CardContent>
