@@ -207,29 +207,29 @@ def create_initial_transaction(email: str, amount: float = 1000.0) -> Optional[T
     """
     try:
         from datetime import datetime
-        
+
         expected_fields = ['user_email', 'amount', 'description', 'timestamp']
         field_mapping, available_fields = get_field_mapping(transactions_table, expected_fields)
-        
+
         fields = {
             "user_email": email,
             "amount": amount,
             "description": "Initial amount",
             "timestamp": datetime.now().isoformat()
         }
-        
+
         if AIRTABLE_TRANSACTION_USER_EMAIL_FIELD_ID:
             fields[AIRTABLE_TRANSACTION_USER_EMAIL_FIELD_ID] = email
-            
+
         if AIRTABLE_TRANSACTION_AMOUNT_FIELD_ID:
             fields[AIRTABLE_TRANSACTION_AMOUNT_FIELD_ID] = amount
-            
+
         if AIRTABLE_TRANSACTION_DESCRIPTION_FIELD_ID:
             fields[AIRTABLE_TRANSACTION_DESCRIPTION_FIELD_ID] = "Initial amount"
-            
+
         if AIRTABLE_TRANSACTION_TIMESTAMP_FIELD_ID:
             fields[AIRTABLE_TRANSACTION_TIMESTAMP_FIELD_ID] = datetime.now().isoformat()
-        
+
         for field_name, mapped_field in field_mapping.items():
             if field_name == 'user_email':
                 fields[mapped_field] = email
@@ -239,10 +239,10 @@ def create_initial_transaction(email: str, amount: float = 1000.0) -> Optional[T
                 fields[mapped_field] = "Initial amount"
             elif field_name == 'timestamp':
                 fields[mapped_field] = datetime.now().isoformat()
-        
+
         print(f"Creating initial transaction with fields: {fields}")
         record = transactions_table.create(fields)
-        
+
         return Transaction(
             id=record["id"],
             amount=float(amount),
@@ -250,8 +250,9 @@ def create_initial_transaction(email: str, amount: float = 1000.0) -> Optional[T
             description="Initial amount"
         )
     except Exception as e:
-        print(f"Error creating initial transaction in Airtable: {e}")
-        return None
+        error_message = f"Error creating initial transaction in Airtable: {e}"
+        print(error_message)
+        raise Exception(error_message)
 
 def get_wallet_balance(email: str) -> Optional[WalletBalance]:
     """
@@ -290,10 +291,10 @@ def get_wallet_balance(email: str) -> Optional[WalletBalance]:
 
         if not records:
             print(f"No wallet found for {email}, creating initial transaction")
-            transaction = create_initial_transaction(email, 1000.0)
-            if transaction:
+            try:
+                transaction = create_initial_transaction(email, amount=1000.0)
                 print(f"Created initial transaction: {transaction}")
-                
+
                 for formula in formulas_to_try:
                     try:
                         records = wallets_table.all(formula=formula)
@@ -303,19 +304,15 @@ def get_wallet_balance(email: str) -> Optional[WalletBalance]:
                     except Exception as e:
                         print(f"Wallet formula failed after transaction {formula}: {e}")
                         continue
-                
+
                 if not records:
-                    print("Wallet not created after transaction, returning default balance")
-                    return WalletBalance(
-                        balance=1000.0,
-                        last_updated=None
-                    )
-            else:
-                print("Failed to create initial transaction, returning default balance")
-                return WalletBalance(
-                    balance=1000.0,
-                    last_updated=None
-                )
+                    error_message = "Wallet not created after transaction: Airtable automation may not be configured correctly"
+                    print(error_message)
+                    raise Exception(error_message)
+            except Exception as e:
+                error_message = f"Wallet creation process failed: {e}"
+                print(error_message)
+                raise Exception(error_message)
 
         record = records[0]
         print(f"Wallet record fields: {record['fields']}")
@@ -342,12 +339,10 @@ def get_wallet_balance(email: str) -> Optional[WalletBalance]:
             last_updated=last_updated
         )
     except Exception as e:
-        print(f"Error retrieving wallet balance from Airtable: {e}")
+        error_message = f"Error retrieving wallet balance from Airtable: {e}"
+        print(error_message)
         print(f"Available fields in wallet table: {[record.get('fields', {}).keys() for record in wallets_table.all(max_records=1)]}")
-        return WalletBalance(
-            balance=1000.0,
-            last_updated=None
-        )
+        raise Exception(error_message)
 
 def get_transactions(email: str) -> List[Transaction]:
     """
