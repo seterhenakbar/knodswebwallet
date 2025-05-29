@@ -30,10 +30,11 @@ async def airtable_error_handler(request: Request, call_next):
         return await call_next(request)
     except Exception as e:
         print(f"Error: {e}")
-        return {
-            "status_code": 500,
-            "detail": "An error occurred while connecting to the database. Please try again later."
-        }
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "An error occurred while connecting to the database. Please try again later."}
+        )
 
 @app.get("/healthz")
 async def healthz():
