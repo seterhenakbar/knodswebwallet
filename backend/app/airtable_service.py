@@ -40,7 +40,7 @@ def get_field_mapping(table: Table, expected_fields: List[str]) -> Tuple[Dict[st
         if sample_records:
             available_fields = list(sample_records[0]['fields'].keys())
             print(f"Available fields in table: {available_fields}")
-            
+
             mapping = {}
             for expected_field in expected_fields:
                 if expected_field in available_fields:
@@ -49,7 +49,7 @@ def get_field_mapping(table: Table, expected_fields: List[str]) -> Tuple[Dict[st
                     partial_matches = [f for f in available_fields if expected_field.lower() in f.lower()]
                     if partial_matches:
                         mapping[expected_field] = partial_matches[0]
-            
+
             print(f"Field mapping: {mapping}")
             return mapping, available_fields
         return {}, []
@@ -64,18 +64,18 @@ def get_user_by_email(email: str) -> Optional[UserInDB]:
     try:
         expected_fields = ['email', 'password_hash']
         field_mapping, available_fields = get_field_mapping(users_table, expected_fields)
-        
+
         print(f"Available fields: {available_fields}")
         print(f"Field mapping: {field_mapping}")
-        
+
         formulas_to_try = [
             f"{{email}} = '{email}'",
             f"{{{AIRTABLE_EMAIL_FIELD_ID}}} = '{email}'"
         ]
-        
+
         if 'email' in field_mapping:
             formulas_to_try.append(f"{{{field_mapping['email']}}} = '{email}'")
-        
+
         records = []
         for formula in formulas_to_try:
             try:
@@ -87,40 +87,40 @@ def get_user_by_email(email: str) -> Optional[UserInDB]:
             except Exception as e:
                 print(f"Formula failed {formula}: {e}")
                 continue
-        
+
         if not records:
             print(f"No user found for email: {email}")
             return None
-        
+
         record = records[0]
         print(f"User record fields: {record['fields']}")
-        
+
         email_value = None
         password_hash_value = None
-        
+
         for field in [AIRTABLE_EMAIL_FIELD_ID, "email"] + list(field_mapping.values()):
             if field and field in record["fields"]:
                 email_value = record["fields"][field]
                 print(f"Found email value in field: {field}")
                 break
-        
+
         # Try all possible field names/IDs for password_hash
         for field in [AIRTABLE_PASSWORD_HASH_FIELD_ID, "password_hash"] + list(field_mapping.values()):
             if field and field in record["fields"]:
                 password_hash_value = record["fields"][field]
                 print(f"Found password_hash value in field: {field}")
                 break
-        
+
         if not email_value or not password_hash_value:
             print(f"Missing required fields. Email: {bool(email_value)}, Password: {bool(password_hash_value)}")
             return None
-        
+
         user_data = {
             "id": record["id"],
             "email": email_value,
             "password_hash": password_hash_value
         }
-        
+
         return UserInDB(**user_data)
     except Exception as e:
         print(f"Error retrieving user from Airtable: {e}")
@@ -135,31 +135,31 @@ def create_user(email: str, password_hash: str) -> Optional[UserInDB]:
         existing_user = get_user_by_email(email)
         if existing_user:
             return None
-        
+
         expected_fields = ['email', 'password_hash']
         field_mapping, available_fields = get_field_mapping(users_table, expected_fields)
-        
+
         fields = {
             "email": email,  # Use field name for formula queries
             "password_hash": password_hash,  # Use field name for formula queries
         }
-        
+
         if AIRTABLE_EMAIL_FIELD_ID:
             fields[AIRTABLE_EMAIL_FIELD_ID] = email
-        
+
         if AIRTABLE_PASSWORD_HASH_FIELD_ID:
             fields[AIRTABLE_PASSWORD_HASH_FIELD_ID] = password_hash
-        
+
         for field_name, mapped_field in field_mapping.items():
             if field_name == 'email':
                 fields[mapped_field] = email
             elif field_name == 'password_hash':
                 fields[mapped_field] = password_hash
-        
+
         print(f"Creating user with fields: {fields}")
         record = users_table.create(fields)
         print(f"Created record: {record}")
-        
+
         return UserInDB(
             id=record["id"],
             email=email,
@@ -178,21 +178,21 @@ def update_user_password(email: str, password_hash: str) -> bool:
         user = get_user_by_email(email)
         if not user:
             return False
-        
+
         expected_fields = ['password_hash']
         field_mapping, available_fields = get_field_mapping(users_table, expected_fields)
-        
+
         fields = {}
-        
+
         if AIRTABLE_PASSWORD_HASH_FIELD_ID:
             fields[AIRTABLE_PASSWORD_HASH_FIELD_ID] = password_hash
-        
+
         fields["password_hash"] = password_hash
-        
+
         for field_name, mapped_field in field_mapping.items():
             if field_name == 'password_hash':
                 fields[mapped_field] = password_hash
-        
+
         print(f"Updating user password with fields: {fields}")
         users_table.update(user.id, fields)
         return True
@@ -200,6 +200,58 @@ def update_user_password(email: str, password_hash: str) -> bool:
         print(f"Error updating user password in Airtable: {e}")
         print(f"Available fields in user table: {[record.get('fields', {}).keys() for record in users_table.all(max_records=1)]}")
         return False
+
+def create_initial_transaction(email: str, amount: float = 1000.0) -> Optional[Transaction]:
+    """
+    Create an initial transaction record for a new user
+    """
+    try:
+        from datetime import datetime
+        
+        expected_fields = ['user_email', 'amount', 'description', 'timestamp']
+        field_mapping, available_fields = get_field_mapping(transactions_table, expected_fields)
+        
+        fields = {
+            "user_email": email,
+            "amount": amount,
+            "description": "Initial amount",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        if AIRTABLE_TRANSACTION_USER_EMAIL_FIELD_ID:
+            fields[AIRTABLE_TRANSACTION_USER_EMAIL_FIELD_ID] = email
+            
+        if AIRTABLE_TRANSACTION_AMOUNT_FIELD_ID:
+            fields[AIRTABLE_TRANSACTION_AMOUNT_FIELD_ID] = amount
+            
+        if AIRTABLE_TRANSACTION_DESCRIPTION_FIELD_ID:
+            fields[AIRTABLE_TRANSACTION_DESCRIPTION_FIELD_ID] = "Initial amount"
+            
+        if AIRTABLE_TRANSACTION_TIMESTAMP_FIELD_ID:
+            fields[AIRTABLE_TRANSACTION_TIMESTAMP_FIELD_ID] = datetime.now().isoformat()
+        
+        for field_name, mapped_field in field_mapping.items():
+            if field_name == 'user_email':
+                fields[mapped_field] = email
+            elif field_name == 'amount':
+                fields[mapped_field] = amount
+            elif field_name == 'description':
+                fields[mapped_field] = "Initial amount"
+            elif field_name == 'timestamp':
+                fields[mapped_field] = datetime.now().isoformat()
+        
+        print(f"Creating initial transaction with fields: {fields}")
+        record = transactions_table.create(fields)
+        
+        return Transaction(
+            id=record["id"],
+            amount=float(amount),
+            timestamp=datetime.now().isoformat(),
+            description="Initial amount"
+        )
+    except Exception as e:
+        print(f"Error creating initial transaction in Airtable: {e}")
+        return None
 
 def get_wallet_balance(email: str) -> Optional[WalletBalance]:
     """
@@ -209,21 +261,21 @@ def get_wallet_balance(email: str) -> Optional[WalletBalance]:
         user = get_user_by_email(email)
         if not user:
             return None
-        
+
         expected_fields = ['user_email', 'balance', 'last_updated']
         field_mapping, available_fields = get_field_mapping(wallets_table, expected_fields)
-        
+
         print(f"Wallet available fields: {available_fields}")
         print(f"Wallet field mapping: {field_mapping}")
-        
+
         formulas_to_try = [
             f"{{{AIRTABLE_WALLET_USER_EMAIL_FIELD_ID}}} = '{email}'",
             f"{{user_email}} = '{email}'"
         ]
-        
+
         if 'user_email' in field_mapping:
             formulas_to_try.append(f"{{{field_mapping['user_email']}}} = '{email}'")
-        
+
         records = []
         for formula in formulas_to_try:
             try:
@@ -235,55 +287,56 @@ def get_wallet_balance(email: str) -> Optional[WalletBalance]:
             except Exception as e:
                 print(f"Wallet formula failed {formula}: {e}")
                 continue
-        
+
         if not records:
-            print(f"No wallet found for {email}, creating new wallet")
-            
-            fields = {
-                "user_email": email,
-                "balance": 1000.0
-            }
-            
-            if AIRTABLE_WALLET_USER_EMAIL_FIELD_ID:
-                fields[AIRTABLE_WALLET_USER_EMAIL_FIELD_ID] = email
-            
-            if AIRTABLE_WALLET_BALANCE_FIELD_ID:
-                fields[AIRTABLE_WALLET_BALANCE_FIELD_ID] = 1000.0
-            
-            for field_name, mapped_field in field_mapping.items():
-                if field_name == 'user_email':
-                    fields[mapped_field] = email
-                elif field_name == 'balance':
-                    fields[mapped_field] = 1000.0
-            
-            print(f"Creating wallet with fields: {fields}")
-            record = wallets_table.create(fields)
-            
-            return WalletBalance(
-                balance=1000.0,
-                last_updated=None
-            )
-        
+            print(f"No wallet found for {email}, creating initial transaction")
+            transaction = create_initial_transaction(email, 1000.0)
+            if transaction:
+                print(f"Created initial transaction: {transaction}")
+                
+                for formula in formulas_to_try:
+                    try:
+                        records = wallets_table.all(formula=formula)
+                        if records:
+                            print(f"Wallet created after transaction with formula: {formula}")
+                            break
+                    except Exception as e:
+                        print(f"Wallet formula failed after transaction {formula}: {e}")
+                        continue
+                
+                if not records:
+                    print("Wallet not created after transaction, returning default balance")
+                    return WalletBalance(
+                        balance=1000.0,
+                        last_updated=None
+                    )
+            else:
+                print("Failed to create initial transaction, returning default balance")
+                return WalletBalance(
+                    balance=1000.0,
+                    last_updated=None
+                )
+
         record = records[0]
         print(f"Wallet record fields: {record['fields']}")
-        
+
         balance = 1000.0  # Default value
-        
+
         for field in [AIRTABLE_WALLET_BALANCE_FIELD_ID, "balance"] + [field_mapping.get('balance', '')]:
             if field and field in record["fields"]:
                 balance = record["fields"][field]
                 print(f"Found balance value in field: {field}")
                 break
-        
+
         last_updated = None
-        
+
         # Try all possible field names/IDs for last_updated
         for field in [AIRTABLE_WALLET_LAST_UPDATED_FIELD_ID, "last_updated"] + [field_mapping.get('last_updated', '')]:
             if field and field in record["fields"]:
                 last_updated = record["fields"][field]
                 print(f"Found last_updated value in field: {field}")
                 break
-        
+
         return WalletBalance(
             balance=float(balance),
             last_updated=last_updated
@@ -303,18 +356,18 @@ def get_transactions(email: str) -> List[Transaction]:
     try:
         expected_fields = ['user_email', 'amount', 'description', 'timestamp']
         field_mapping, available_fields = get_field_mapping(transactions_table, expected_fields)
-        
+
         print(f"Transaction available fields: {available_fields}")
         print(f"Transaction field mapping: {field_mapping}")
-        
+
         formulas_to_try = [
             f"{{{AIRTABLE_TRANSACTION_USER_EMAIL_FIELD_ID}}} = '{email}'",
             f"{{user_email}} = '{email}'"
         ]
-        
+
         if 'user_email' in field_mapping:
             formulas_to_try.append(f"{{{field_mapping['user_email']}}} = '{email}'")
-        
+
         records = []
         for formula in formulas_to_try:
             try:
@@ -326,35 +379,35 @@ def get_transactions(email: str) -> List[Transaction]:
             except Exception as e:
                 print(f"Transaction formula failed {formula}: {e}")
                 continue
-        
+
         transactions = []
         for record in records:
             try:
                 print(f"Transaction record fields: {record['fields']}")
-                
+
                 tx_id = record["id"]
-                
+
                 amount = 0.0
                 for field in [AIRTABLE_TRANSACTION_AMOUNT_FIELD_ID, "amount"] + [field_mapping.get('amount', '')]:
                     if field and field in record["fields"]:
                         amount = record["fields"][field]
                         print(f"Found amount value in field: {field}")
                         break
-                
+
                 timestamp = None
                 for field in [AIRTABLE_TRANSACTION_TIMESTAMP_FIELD_ID, "timestamp"] + [field_mapping.get('timestamp', '')]:
                     if field and field in record["fields"]:
                         timestamp = record["fields"][field]
                         print(f"Found timestamp value in field: {field}")
                         break
-                
+
                 description = ""
                 for field in [AIRTABLE_TRANSACTION_DESCRIPTION_FIELD_ID, "description"] + [field_mapping.get('description', '')]:
                     if field and field in record["fields"]:
                         description = record["fields"][field]
                         print(f"Found description value in field: {field}")
                         break
-                
+
                 transaction = Transaction(
                     id=tx_id,
                     amount=float(amount),
@@ -365,13 +418,13 @@ def get_transactions(email: str) -> List[Transaction]:
             except Exception as e:
                 print(f"Error processing transaction record: {e}")
                 print(f"Record fields: {record.get('fields', {})}")
-        
+
         # If no transactions found, return mock data
         if not transactions:
             print(f"No transactions found for {email}, returning mock data")
             from datetime import datetime, timedelta
             now = datetime.now()
-            
+
             transactions = [
                 Transaction(
                     id="mock-tx1",
@@ -392,17 +445,17 @@ def get_transactions(email: str) -> List[Transaction]:
                     description="Monthly Contribution"
                 )
             ]
-        
+
         transactions.sort(key=lambda x: x.timestamp if x.timestamp else "", reverse=True)
-        
+
         return transactions
     except Exception as e:
         print(f"Error retrieving transactions from Airtable: {e}")
         print(f"Available fields in transaction table: {[record.get('fields', {}).keys() for record in transactions_table.all(max_records=1)]}")
-        
+
         from datetime import datetime, timedelta
         now = datetime.now()
-        
+
         return [
             Transaction(
                 id="error-tx1",
